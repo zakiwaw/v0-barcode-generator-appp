@@ -16,24 +16,31 @@ export async function loginWithPin(pin: string) {
     const supabase = await createClient()
     console.log("[v0] Supabase client created")
 
-    // Check if any profile exists
-    const { data: existingProfiles, error: selectError } = await supabase.from("profiles").select("id").limit(1)
+    // Check if profile with PIN 0000 exists
+    const { data: existingProfile, error: selectError } = await supabase
+      .from("profiles")
+      .select("*")
+      .eq("pin_hash", "0000")
+      .single()
 
-    console.log("[v0] Profile check result:", { existingProfiles, selectError })
+    console.log("[v0] Profile check result:", { existingProfile, selectError })
 
-    if (selectError) {
-      console.log("[v0] Error checking profiles:", selectError)
-      return { success: false, error: "Datenbankfehler beim Überprüfen des Profils" }
-    }
+    let profileId: string
 
-    if (!existingProfiles || existingProfiles.length === 0) {
-      console.log("[v0] No profile found, creating new one")
+    if (selectError && selectError.code === "PGRST116") {
+      // Profile doesn't exist, create it
+      console.log("[v0] No profile found, creating new one for Zaki")
 
-      // Create a profile entry with detailed error logging
       const { data: insertData, error: insertError } = await supabase
         .from("profiles")
-        .insert([{ pin_hash: "0000" }])
+        .insert([
+          {
+            pin_hash: "0000",
+            user_name: "Zaki", // Added user name field
+          },
+        ])
         .select()
+        .single()
 
       console.log("[v0] Profile creation result:", { insertData, insertError })
 
@@ -47,12 +54,17 @@ export async function loginWithPin(pin: string) {
         return { success: false, error: `Datenbankfehler: ${insertError.message}` }
       }
 
-      console.log("[v0] Profile created successfully")
+      profileId = insertData.id
+      console.log("[v0] Profile created successfully for Zaki")
+    } else if (selectError) {
+      console.log("[v0] Error checking profile:", selectError)
+      return { success: false, error: "Datenbankfehler beim Überprüfen des Profils" }
     } else {
-      console.log("[v0] Profile already exists")
+      profileId = existingProfile.id
+      console.log("[v0] Profile already exists for Zaki")
     }
 
-    // Set authentication cookie
+    // Set authentication cookie with user info
     const cookieStore = await cookies()
     cookieStore.set("authenticated", "true", {
       httpOnly: true,
@@ -61,8 +73,16 @@ export async function loginWithPin(pin: string) {
       maxAge: 60 * 60 * 24 * 7, // 7 days
     })
 
-    console.log("[v0] Authentication cookie set")
-    return { success: true }
+    cookieStore.set("user_name", "Zaki", {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
+      maxAge: 60 * 60 * 24 * 7, // 7 days
+    })
+
+    console.log("[v0] Authentication cookies set for Zaki")
+
+    redirect("/")
   } catch (error) {
     console.log("[v0] Unexpected error in login:", error)
     return { success: false, error: "Ein unerwarteter Fehler ist aufgetreten." }

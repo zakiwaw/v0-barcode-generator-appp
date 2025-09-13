@@ -5,7 +5,6 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { useRouter } from "next/navigation"
 import { useState } from "react"
 import { loginWithPin } from "./actions"
 
@@ -13,7 +12,6 @@ export default function Page() {
   const [pin, setPin] = useState("")
   const [error, setError] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
-  const router = useRouter()
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -23,9 +21,8 @@ export default function Page() {
     try {
       const result = await loginWithPin(pin)
 
-      if (result.success) {
-        router.push("/")
-      } else {
+      // If we get here, there was an error (redirect would have happened on success)
+      if (result && !result.success) {
         setError(result.error || "Ein Fehler ist aufgetreten.")
       }
     } catch (error: unknown) {
@@ -42,7 +39,7 @@ export default function Page() {
         <Card>
           <CardHeader className="pb-4">
             <CardTitle className="text-xl text-center">Anmelden</CardTitle>
-            <CardDescription className="text-center text-sm">Geben Sie Ihre PIN ein</CardDescription>
+            <CardDescription className="text-center text-sm">Geben Sie Ihre PIN ein (0000 für Zaki)</CardDescription>
           </CardHeader>
           <CardContent>
             <form onSubmit={handleLogin}>
