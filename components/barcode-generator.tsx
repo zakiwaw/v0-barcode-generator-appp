@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Download, Save } from "lucide-react"
+import { Download } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { createClient } from "@/lib/supabase/client"
 import { useRouter } from "next/navigation"
@@ -59,11 +59,11 @@ export function BarcodeGenerator() {
     return () => subscription.unsubscribe()
   }, [supabase.auth])
 
-  const generateBarcode = () => {
+  const generateBarcode = async () => {
     if (!data.trim()) {
       toast({
-        title: "Error",
-        description: "Please enter data to generate barcode",
+        title: "Fehler",
+        description: "Bitte geben Sie Daten ein, um einen Barcode zu generieren",
         variant: "destructive",
       })
       return
@@ -71,8 +71,8 @@ export function BarcodeGenerator() {
 
     if (!window.JsBarcode) {
       toast({
-        title: "Error",
-        description: "Barcode library is still loading. Please try again.",
+        title: "Fehler",
+        description: "Barcode-Bibliothek lädt noch. Bitte versuchen Sie es erneut.",
         variant: "destructive",
       })
       return
@@ -93,21 +93,50 @@ export function BarcodeGenerator() {
         window.JsBarcode(canvas, data, {
           format: format,
           width: 2,
-          height: 100,
+          height: 80,
           displayValue: true,
-          fontSize: 14,
-          margin: 10,
+          fontSize: 12,
+          margin: 8,
         })
 
-        toast({
-          title: "Success",
-          description: "Barcode generated successfully!",
-        })
+        if (user) {
+          try {
+            const { error } = await supabase.from("barcodes").insert({
+              data: data,
+              format: format,
+              user_id: user.id,
+            })
+
+            if (!error) {
+              toast({
+                title: "Erfolg",
+                description: "Barcode generiert und gespeichert!",
+              })
+            } else {
+              toast({
+                title: "Erfolg",
+                description: "Barcode generiert! (Speichern fehlgeschlagen)",
+              })
+            }
+          } catch (saveError) {
+            toast({
+              title: "Erfolg",
+              description: "Barcode generiert! (Speichern fehlgeschlagen)",
+            })
+          }
+        } else {
+          toast({
+            title: "Erfolg",
+            description: "Barcode erfolgreich generiert!",
+          })
+        }
+
+        setData("")
       }
     } catch (error) {
       toast({
-        title: "Error",
-        description: "Failed to generate barcode. Please check your input.",
+        title: "Fehler",
+        description: "Barcode-Generierung fehlgeschlagen. Bitte überprüfen Sie Ihre Eingabe.",
         variant: "destructive",
       })
     } finally {
@@ -119,8 +148,8 @@ export function BarcodeGenerator() {
     const canvas = canvasRef.current
     if (!canvas) {
       toast({
-        title: "Error",
-        description: "No barcode to download. Please generate one first.",
+        title: "Fehler",
+        description: "Kein Barcode zum Herunterladen. Bitte generieren Sie zuerst einen.",
         variant: "destructive",
       })
       return
@@ -128,92 +157,50 @@ export function BarcodeGenerator() {
 
     try {
       const link = document.createElement("a")
-      link.download = `barcode-${data}-${Date.now()}.png`
+      link.download = `barcode-${Date.now()}.png`
       link.href = canvas.toDataURL()
       link.click()
 
       toast({
-        title: "Success",
-        description: "Barcode downloaded successfully!",
+        title: "Erfolg",
+        description: "Barcode erfolgreich heruntergeladen!",
       })
     } catch (error) {
       toast({
-        title: "Error",
-        description: "Failed to download barcode.",
+        title: "Fehler",
+        description: "Download fehlgeschlagen.",
         variant: "destructive",
       })
-    }
-  }
-
-  const saveBarcode = async () => {
-    const canvas = canvasRef.current
-    if (!canvas || !data.trim()) {
-      toast({
-        title: "Error",
-        description: "No barcode to save. Please generate one first.",
-        variant: "destructive",
-      })
-      return
-    }
-
-    if (!user) {
-      toast({
-        title: "Authentication Required",
-        description: "Please sign in to save barcodes.",
-      })
-      router.push("/auth/login")
-      return
-    }
-
-    setIsSaving(true)
-
-    try {
-      const { error } = await supabase.from("barcodes").insert({
-        data: data,
-        format: format,
-        user_id: user.id,
-      })
-
-      if (error) throw error
-
-      toast({
-        title: "Success",
-        description: "Barcode saved successfully!",
-      })
-    } catch (error) {
-      console.error("Save error:", error)
-      toast({
-        title: "Error",
-        description: "Failed to save barcode.",
-        variant: "destructive",
-      })
-    } finally {
-      setIsSaving(false)
     }
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <Card>
-        <CardHeader>
-          <CardTitle>Generate Barcode</CardTitle>
+        <CardHeader className="pb-4">
+          <CardTitle className="text-lg">Barcode Generieren</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="space-y-3">
             <div className="space-y-2">
-              <Label htmlFor="data">Barcode Data</Label>
+              <Label htmlFor="data" className="text-sm font-medium">
+                Barcode-Daten
+              </Label>
               <Input
                 id="data"
-                placeholder="Enter text or numbers"
+                placeholder="Text oder Zahlen eingeben"
                 value={data}
                 onChange={(e) => setData(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && generateBarcode()}
+                className="text-base"
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="format">Barcode Format</Label>
+              <Label htmlFor="format" className="text-sm font-medium">
+                Barcode-Format
+              </Label>
               <Select value={format} onValueChange={setFormat}>
-                <SelectTrigger>
+                <SelectTrigger className="text-base">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -230,39 +217,37 @@ export function BarcodeGenerator() {
             </div>
           </div>
 
-          <Button onClick={generateBarcode} disabled={isGenerating || !data.trim()} className="w-full md:w-auto">
-            {isGenerating ? "Generating..." : "Generate Barcode"}
+          <Button
+            onClick={generateBarcode}
+            disabled={isGenerating || !data.trim()}
+            className="w-full h-12 text-base font-medium"
+          >
+            {isGenerating ? "Generiere..." : "Barcode Generieren"}
           </Button>
         </CardContent>
       </Card>
 
       <Card>
-        <CardHeader>
-          <CardTitle>Generated Barcode</CardTitle>
+        <CardHeader className="pb-4">
+          <CardTitle className="text-lg">Generierter Barcode</CardTitle>
         </CardHeader>
         <CardContent>
           <div className="flex flex-col items-center space-y-4">
-            <div className="border border-border rounded-lg p-4 bg-white min-h-[140px] flex items-center justify-center">
+            <div className="border border-border rounded-lg p-3 bg-white min-h-[120px] w-full flex items-center justify-center">
               <canvas ref={canvasRef} className="max-w-full h-auto" />
             </div>
 
-            <div className="flex gap-2">
-              <Button onClick={downloadBarcode} variant="outline" size="sm">
-                <Download className="w-4 h-4 mr-2" />
-                Download
-              </Button>
-              <Button onClick={saveBarcode} variant="outline" size="sm" disabled={isSaving}>
-                <Save className="w-4 h-4 mr-2" />
-                {isSaving ? "Saving..." : "Save"}
-              </Button>
-            </div>
+            <Button onClick={downloadBarcode} variant="outline" className="w-full h-12 text-base bg-transparent">
+              <Download className="w-4 h-4 mr-2" />
+              Herunterladen
+            </Button>
 
             {!user && (
-              <p className="text-sm text-muted-foreground text-center">
-                <Button variant="link" className="p-0 h-auto" onClick={() => router.push("/auth/login")}>
-                  Sign in
+              <p className="text-sm text-muted-foreground text-center px-2">
+                <Button variant="link" className="p-0 h-auto text-sm" onClick={() => router.push("/auth/login")}>
+                  Anmelden
                 </Button>{" "}
-                to save your barcodes
+                um Ihre Barcodes zu speichern
               </p>
             )}
           </div>
