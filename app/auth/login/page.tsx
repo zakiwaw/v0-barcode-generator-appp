@@ -1,13 +1,13 @@
 "use client"
 
 import type React from "react"
-import { createClient } from "@/lib/supabase/client"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { useRouter } from "next/navigation"
 import { useState } from "react"
+import { loginWithPin } from "./actions"
 
 export default function Page() {
   const [pin, setPin] = useState("")
@@ -21,24 +21,16 @@ export default function Page() {
     setError(null)
 
     try {
-      if (pin === "0000") {
-        const supabase = createClient()
+      const result = await loginWithPin(pin)
 
-        const { error } = await supabase.auth.signInWithPassword({
-          email: "pin@barcode.app",
-          password: "0000",
-        })
-
-        if (error) {
-          throw error
-        }
-
+      if (result.success) {
         router.push("/dashboard")
       } else {
-        setError("Ungültige PIN. Bitte versuchen Sie es erneut.")
+        setError(result.error || "Ein Fehler ist aufgetreten.")
       }
     } catch (error: unknown) {
-      setError("Ein Fehler ist aufgetreten")
+      console.log("[v0] Login error:", error)
+      setError("Ein Fehler ist aufgetreten. Bitte versuchen Sie es erneut.")
     } finally {
       setIsLoading(false)
     }

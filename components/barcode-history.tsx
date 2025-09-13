@@ -5,9 +5,10 @@ import { createClient } from "@/lib/supabase/client"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { Download, Trash2, Eye, Calendar } from "lucide-react"
+import { Download, Trash2, Eye, Calendar, LogOut } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { useRouter } from "next/navigation"
+import { logout } from "@/app/auth/login/actions"
 
 interface Barcode {
   id: string
@@ -20,7 +21,6 @@ export function BarcodeHistory() {
   const [barcodes, setBarcodes] = useState<Barcode[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [selectedBarcode, setSelectedBarcode] = useState<Barcode | null>(null)
-  const [isAuthenticated, setIsAuthenticated] = useState(false)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const { toast } = useToast()
   const router = useRouter()
@@ -41,37 +41,29 @@ export function BarcodeHistory() {
   }, [])
 
   useEffect(() => {
-    checkAuthAndLoadBarcodes()
+    loadBarcodes()
   }, [])
 
-  const checkAuthAndLoadBarcodes = async () => {
+  const loadBarcodes = async () => {
+    setIsLoading(true)
     try {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser()
+      // Get the profile ID (there should only be one)
+      const { data: profile } = await supabase.from("profiles").select("id").limit(1).single()
 
-      if (!user) {
-        setIsAuthenticated(false)
+      if (!profile) {
+        toast({
+          title: "Fehler",
+          description: "Profil nicht gefunden. Bitte melden Sie sich erneut an.",
+          variant: "destructive",
+        })
         router.push("/auth/login")
         return
       }
 
-      setIsAuthenticated(true)
-      await loadBarcodes(user.id)
-    } catch (error) {
-      console.error("Auth check error:", error)
-      setIsAuthenticated(false)
-      router.push("/auth/login")
-    }
-  }
-
-  const loadBarcodes = async (userId: string) => {
-    setIsLoading(true)
-    try {
       const { data, error } = await supabase
         .from("barcodes")
         .select("*")
-        .eq("user_id", userId)
+        .eq("user_id", profile.id)
         .order("created_at", { ascending: false })
 
       if (error) throw error
@@ -87,6 +79,10 @@ export function BarcodeHistory() {
     } finally {
       setIsLoading(false)
     }
+  }
+
+  const handleLogout = async () => {
+    await logout()
   }
 
   const viewBarcode = (barcode: Barcode) => {
@@ -199,19 +195,6 @@ export function BarcodeHistory() {
     })
   }
 
-  if (!isAuthenticated) {
-    return (
-      <div className="flex items-center justify-center min-h-[300px]">
-        <div className="text-center">
-          <p className="text-muted-foreground mb-4">
-            Bitte melden Sie sich an, um Ihre gespeicherten Barcodes zu sehen.
-          </p>
-          <Button onClick={() => router.push("/auth/login")}>Anmelden</Button>
-        </div>
-      </div>
-    )
-  }
-
   if (isLoading) {
     return (
       <div className="flex items-center justify-center min-h-[300px]">
@@ -228,10 +211,16 @@ export function BarcodeHistory() {
       {/* Barcode List */}
       <Card>
         <CardHeader className="pb-3">
-          <CardTitle className="flex items-center gap-2 text-lg">
-            <Calendar className="w-5 h-5" />
-            Gespeicherte Barcodes ({barcodes.length})
-          </CardTitle>
+          <div className="flex items-center justify-between">
+            <CardTitle className="flex items-center gap-2 text-lg">
+              <Calendar className="w-5 h-5" />
+              Gespeicherte Barcodes ({barcodes.length})
+            </CardTitle>
+            <Button variant="outline" size="sm" onClick={handleLogout}>
+              <LogOut className="w-4 h-4 mr-2" />
+              Abmelden
+            </Button>
+          </div>
         </CardHeader>
         <CardContent>
           {barcodes.length === 0 ? (
