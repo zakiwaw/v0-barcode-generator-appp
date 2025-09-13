@@ -5,10 +5,8 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Download } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
-import { createClient } from "@/lib/supabase/client"
 import { useRouter } from "next/navigation"
 
 // Import JsBarcode library
@@ -20,14 +18,12 @@ declare global {
 
 export function BarcodeGenerator() {
   const [data, setData] = useState("")
-  const [format, setFormat] = useState("CODE128")
+  const format = "CODE128"
   const [isGenerating, setIsGenerating] = useState(false)
-  const [isSaving, setIsSaving] = useState(false)
-  const [user, setUser] = useState<any>(null)
+  const [isAuthenticated, setIsAuthenticated] = useState(false)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const { toast } = useToast()
   const router = useRouter()
-  const supabase = createClient()
 
   // Load JsBarcode library
   useEffect(() => {
@@ -42,22 +38,9 @@ export function BarcodeGenerator() {
   }, [])
 
   useEffect(() => {
-    const getUser = async () => {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser()
-      setUser(user)
-    }
-    getUser()
-
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((event, session) => {
-      setUser(session?.user ?? null)
-    })
-
-    return () => subscription.unsubscribe()
-  }, [supabase.auth])
+    const authenticated = localStorage.getItem("authenticated") === "true"
+    setIsAuthenticated(authenticated)
+  }, [])
 
   const generateBarcode = async () => {
     if (!data.trim()) {
@@ -93,31 +76,28 @@ export function BarcodeGenerator() {
         window.JsBarcode(canvas, data, {
           format: format,
           width: 2,
-          height: 80,
+          height: 60, // Reduced height for mobile
           displayValue: true,
-          fontSize: 12,
-          margin: 8,
+          fontSize: 10, // Smaller font for mobile
+          margin: 4, // Reduced margin for mobile
         })
 
-        if (user) {
+        if (isAuthenticated) {
           try {
-            const { error } = await supabase.from("barcodes").insert({
+            const savedBarcodes = JSON.parse(localStorage.getItem("savedBarcodes") || "[]")
+            const newBarcode = {
+              id: Date.now(),
               data: data,
               format: format,
-              user_id: user.id,
-            })
-
-            if (!error) {
-              toast({
-                title: "Erfolg",
-                description: "Barcode generiert und gespeichert!",
-              })
-            } else {
-              toast({
-                title: "Erfolg",
-                description: "Barcode generiert! (Speichern fehlgeschlagen)",
-              })
+              created_at: new Date().toISOString(),
             }
+            savedBarcodes.push(newBarcode)
+            localStorage.setItem("savedBarcodes", JSON.stringify(savedBarcodes))
+
+            toast({
+              title: "Erfolg",
+              description: "Barcode generiert und gespeichert!",
+            })
           } catch (saveError) {
             toast({
               title: "Erfolg",
@@ -175,46 +155,24 @@ export function BarcodeGenerator() {
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       <Card>
-        <CardHeader className="pb-4">
+        <CardHeader className="pb-3">
           <CardTitle className="text-lg">Barcode Generieren</CardTitle>
         </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="space-y-3">
-            <div className="space-y-2">
-              <Label htmlFor="data" className="text-sm font-medium">
-                Barcode-Daten
-              </Label>
-              <Input
-                id="data"
-                placeholder="Text oder Zahlen eingeben"
-                value={data}
-                onChange={(e) => setData(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && generateBarcode()}
-                className="text-base"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="format" className="text-sm font-medium">
-                Barcode-Format
-              </Label>
-              <Select value={format} onValueChange={setFormat}>
-                <SelectTrigger className="text-base">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="CODE128">CODE128</SelectItem>
-                  <SelectItem value="CODE39">CODE39</SelectItem>
-                  <SelectItem value="EAN13">EAN13</SelectItem>
-                  <SelectItem value="EAN8">EAN8</SelectItem>
-                  <SelectItem value="UPC">UPC</SelectItem>
-                  <SelectItem value="ITF14">ITF14</SelectItem>
-                  <SelectItem value="MSI">MSI</SelectItem>
-                  <SelectItem value="pharmacode">Pharmacode</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
+        <CardContent className="space-y-3">
+          <div className="space-y-2">
+            <Label htmlFor="data" className="text-sm font-medium">
+              Barcode-Daten
+            </Label>
+            <Input
+              id="data"
+              placeholder="Text oder Zahlen eingeben"
+              value={data}
+              onChange={(e) => setData(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && generateBarcode()}
+              className="text-base h-12"
+            />
           </div>
 
           <Button
@@ -228,12 +186,12 @@ export function BarcodeGenerator() {
       </Card>
 
       <Card>
-        <CardHeader className="pb-4">
+        <CardHeader className="pb-3">
           <CardTitle className="text-lg">Generierter Barcode</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="flex flex-col items-center space-y-4">
-            <div className="border border-border rounded-lg p-3 bg-white min-h-[120px] w-full flex items-center justify-center">
+          <div className="flex flex-col items-center space-y-3">
+            <div className="border border-border rounded-lg p-2 bg-white min-h-[100px] w-full flex items-center justify-center">
               <canvas ref={canvasRef} className="max-w-full h-auto" />
             </div>
 
@@ -242,9 +200,9 @@ export function BarcodeGenerator() {
               Herunterladen
             </Button>
 
-            {!user && (
-              <p className="text-sm text-muted-foreground text-center px-2">
-                <Button variant="link" className="p-0 h-auto text-sm" onClick={() => router.push("/auth/login")}>
+            {!isAuthenticated && (
+              <p className="text-xs text-muted-foreground text-center px-2">
+                <Button variant="link" className="p-0 h-auto text-xs" onClick={() => router.push("/auth/login")}>
                   Anmelden
                 </Button>{" "}
                 um Ihre Barcodes zu speichern

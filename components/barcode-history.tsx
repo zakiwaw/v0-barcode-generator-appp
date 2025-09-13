@@ -1,12 +1,12 @@
 "use client"
 
 import { useState, useEffect, useRef } from "react"
+import { createClient } from "@/lib/supabase/client"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Download, Trash2, Eye, Calendar } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
-import { createClient } from "@/lib/supabase/client"
 import { useRouter } from "next/navigation"
 
 interface Barcode {
@@ -20,7 +20,7 @@ export function BarcodeHistory() {
   const [barcodes, setBarcodes] = useState<Barcode[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [selectedBarcode, setSelectedBarcode] = useState<Barcode | null>(null)
-  const [user, setUser] = useState<any>(null)
+  const [isAuthenticated, setIsAuthenticated] = useState(false)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const { toast } = useToast()
   const router = useRouter()
@@ -41,35 +41,29 @@ export function BarcodeHistory() {
   }, [])
 
   useEffect(() => {
-    const getUser = async () => {
+    checkAuthAndLoadBarcodes()
+  }, [])
+
+  const checkAuthAndLoadBarcodes = async () => {
+    try {
       const {
         data: { user },
       } = await supabase.auth.getUser()
-      setUser(user)
 
       if (!user) {
+        setIsAuthenticated(false)
         router.push("/auth/login")
         return
       }
 
+      setIsAuthenticated(true)
       await loadBarcodes(user.id)
+    } catch (error) {
+      console.error("Auth check error:", error)
+      setIsAuthenticated(false)
+      router.push("/auth/login")
     }
-    getUser()
-
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange(async (event, session) => {
-      setUser(session?.user ?? null)
-      if (session?.user) {
-        await loadBarcodes(session.user.id)
-      } else {
-        setBarcodes([])
-        router.push("/auth/login")
-      }
-    })
-
-    return () => subscription.unsubscribe()
-  }, [supabase.auth, router])
+  }
 
   const loadBarcodes = async (userId: string) => {
     setIsLoading(true)
@@ -86,8 +80,8 @@ export function BarcodeHistory() {
     } catch (error) {
       console.error("Load error:", error)
       toast({
-        title: "Error",
-        description: "Failed to load barcodes",
+        title: "Fehler",
+        description: "Fehler beim Laden der Barcodes",
         variant: "destructive",
       })
     } finally {
@@ -98,8 +92,8 @@ export function BarcodeHistory() {
   const viewBarcode = (barcode: Barcode) => {
     if (!window.JsBarcode) {
       toast({
-        title: "Error",
-        description: "Barcode library is still loading. Please try again.",
+        title: "Fehler",
+        description: "Barcode-Bibliothek lädt noch. Bitte versuchen Sie es erneut.",
         variant: "destructive",
       })
       return
@@ -115,15 +109,15 @@ export function BarcodeHistory() {
           window.JsBarcode(canvas, barcode.data, {
             format: barcode.format,
             width: 2,
-            height: 100,
+            height: 60, // Reduced height for mobile
             displayValue: true,
-            fontSize: 14,
-            margin: 10,
+            fontSize: 10, // Smaller font for mobile
+            margin: 4, // Reduced margin for mobile
           })
         } catch (error) {
           toast({
-            title: "Error",
-            description: "Failed to generate barcode preview",
+            title: "Fehler",
+            description: "Fehler beim Generieren der Barcode-Vorschau",
             variant: "destructive",
           })
         }
@@ -134,8 +128,8 @@ export function BarcodeHistory() {
   const downloadBarcode = (barcode: Barcode) => {
     if (!window.JsBarcode) {
       toast({
-        title: "Error",
-        description: "Barcode library is still loading. Please try again.",
+        title: "Fehler",
+        description: "Barcode-Bibliothek lädt noch. Bitte versuchen Sie es erneut.",
         variant: "destructive",
       })
       return
@@ -159,13 +153,13 @@ export function BarcodeHistory() {
       link.click()
 
       toast({
-        title: "Success",
-        description: "Barcode downloaded successfully!",
+        title: "Erfolg",
+        description: "Barcode erfolgreich heruntergeladen!",
       })
     } catch (error) {
       toast({
-        title: "Error",
-        description: "Failed to download barcode",
+        title: "Fehler",
+        description: "Download fehlgeschlagen",
         variant: "destructive",
       })
     }
@@ -182,21 +176,21 @@ export function BarcodeHistory() {
         setSelectedBarcode(null)
       }
       toast({
-        title: "Success",
-        description: "Barcode deleted successfully!",
+        title: "Erfolg",
+        description: "Barcode erfolgreich gelöscht!",
       })
     } catch (error) {
       console.error("Delete error:", error)
       toast({
-        title: "Error",
-        description: "Failed to delete barcode",
+        title: "Fehler",
+        description: "Fehler beim Löschen des Barcodes",
         variant: "destructive",
       })
     }
   }
 
   const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString("en-US", {
+    return new Date(dateString).toLocaleDateString("de-DE", {
       year: "numeric",
       month: "short",
       day: "numeric",
@@ -205,12 +199,14 @@ export function BarcodeHistory() {
     })
   }
 
-  if (!user) {
+  if (!isAuthenticated) {
     return (
-      <div className="flex items-center justify-center min-h-[400px]">
+      <div className="flex items-center justify-center min-h-[300px]">
         <div className="text-center">
-          <p className="text-muted-foreground mb-4">Please sign in to view your saved barcodes.</p>
-          <Button onClick={() => router.push("/auth/login")}>Sign In</Button>
+          <p className="text-muted-foreground mb-4">
+            Bitte melden Sie sich an, um Ihre gespeicherten Barcodes zu sehen.
+          </p>
+          <Button onClick={() => router.push("/auth/login")}>Anmelden</Button>
         </div>
       </div>
     )
@@ -218,44 +214,46 @@ export function BarcodeHistory() {
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center min-h-[400px]">
+      <div className="flex items-center justify-center min-h-[300px]">
         <div className="text-center">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
-          <p className="text-muted-foreground">Loading barcodes...</p>
+          <p className="text-muted-foreground">Lade Barcodes...</p>
         </div>
       </div>
     )
   }
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+    <div className="space-y-4">
       {/* Barcode List */}
       <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
+        <CardHeader className="pb-3">
+          <CardTitle className="flex items-center gap-2 text-lg">
             <Calendar className="w-5 h-5" />
-            Saved Barcodes ({barcodes.length})
+            Gespeicherte Barcodes ({barcodes.length})
           </CardTitle>
         </CardHeader>
         <CardContent>
           {barcodes.length === 0 ? (
-            <div className="text-center py-8">
-              <p className="text-muted-foreground">No saved barcodes yet.</p>
-              <p className="text-sm text-muted-foreground mt-2">Generate and save barcodes to see them here.</p>
+            <div className="text-center py-6">
+              <p className="text-muted-foreground">Noch keine gespeicherten Barcodes.</p>
+              <p className="text-sm text-muted-foreground mt-2">Generieren Sie Barcodes, um sie hier zu sehen.</p>
             </div>
           ) : (
-            <div className="space-y-3">
+            <div className="space-y-2">
               {barcodes.map((barcode) => (
                 <div
                   key={barcode.id}
-                  className={`p-4 border border-border rounded-lg transition-colors ${
+                  className={`p-3 border border-border rounded-lg transition-colors ${
                     selectedBarcode?.id === barcode.id ? "bg-accent" : "hover:bg-accent/50"
                   }`}
                 >
                   <div className="flex items-center justify-between mb-2">
                     <div className="flex items-center gap-2">
-                      <Badge variant="secondary">{barcode.format}</Badge>
-                      <span className="font-mono text-sm">{barcode.data}</span>
+                      <Badge variant="secondary" className="text-xs">
+                        CODE128
+                      </Badge>
+                      <span className="font-mono text-sm truncate">{barcode.data}</span>
                     </div>
                   </div>
 
@@ -263,13 +261,23 @@ export function BarcodeHistory() {
                     <span className="text-xs text-muted-foreground">{formatDate(barcode.created_at)}</span>
 
                     <div className="flex gap-1">
-                      <Button size="sm" variant="ghost" onClick={() => viewBarcode(barcode)}>
+                      <Button size="sm" variant="ghost" onClick={() => viewBarcode(barcode)} className="h-8 w-8 p-0">
                         <Eye className="w-4 h-4" />
                       </Button>
-                      <Button size="sm" variant="ghost" onClick={() => downloadBarcode(barcode)}>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => downloadBarcode(barcode)}
+                        className="h-8 w-8 p-0"
+                      >
                         <Download className="w-4 h-4" />
                       </Button>
-                      <Button size="sm" variant="ghost" onClick={() => deleteBarcode(barcode.id)}>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => deleteBarcode(barcode.id)}
+                        className="h-8 w-8 p-0"
+                      >
                         <Trash2 className="w-4 h-4" />
                       </Button>
                     </div>
@@ -282,46 +290,41 @@ export function BarcodeHistory() {
       </Card>
 
       {/* Barcode Preview */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Barcode Preview</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {selectedBarcode ? (
-            <div className="space-y-4">
+      {selectedBarcode && (
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-lg">Barcode Vorschau</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-3">
               <div className="text-center">
                 <div className="inline-flex items-center gap-2 mb-2">
-                  <Badge>{selectedBarcode.format}</Badge>
-                  <span className="font-mono">{selectedBarcode.data}</span>
+                  <Badge className="text-xs">CODE128</Badge>
+                  <span className="font-mono text-sm">{selectedBarcode.data}</span>
                 </div>
-                <p className="text-xs text-muted-foreground">Created: {formatDate(selectedBarcode.created_at)}</p>
+                <p className="text-xs text-muted-foreground">Erstellt: {formatDate(selectedBarcode.created_at)}</p>
               </div>
 
               <div className="flex justify-center">
-                <div className="border border-border rounded-lg p-4 bg-white">
+                <div className="border border-border rounded-lg p-2 bg-white">
                   <canvas ref={canvasRef} className="max-w-full h-auto" />
                 </div>
               </div>
 
               <div className="flex justify-center gap-2">
-                <Button onClick={() => downloadBarcode(selectedBarcode)} variant="outline" size="sm">
+                <Button onClick={() => downloadBarcode(selectedBarcode)} variant="outline" size="sm" className="h-10">
                   <Download className="w-4 h-4 mr-2" />
-                  Download
+                  Herunterladen
                 </Button>
-                <Button onClick={() => deleteBarcode(selectedBarcode.id)} variant="outline" size="sm">
+                <Button onClick={() => deleteBarcode(selectedBarcode.id)} variant="outline" size="sm" className="h-10">
                   <Trash2 className="w-4 h-4 mr-2" />
-                  Delete
+                  Löschen
                 </Button>
               </div>
             </div>
-          ) : (
-            <div className="text-center py-12">
-              <Eye className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
-              <p className="text-muted-foreground">Select a barcode to preview</p>
-            </div>
-          )}
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+      )}
     </div>
   )
 }

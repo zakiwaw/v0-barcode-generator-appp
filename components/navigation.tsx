@@ -3,50 +3,36 @@
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
-import { QrCode, LayoutDashboard, LogOut, User } from "lucide-react"
-import { createClient } from "@/lib/supabase/client"
+import { QrCode, LayoutDashboard, LogOut } from "lucide-react"
 import { useEffect, useState } from "react"
 import { useToast } from "@/hooks/use-toast"
 
 export function Navigation() {
   const pathname = usePathname()
   const router = useRouter()
-  const [user, setUser] = useState<any>(null)
-  const supabase = createClient()
+  const [isAuthenticated, setIsAuthenticated] = useState(false)
   const { toast } = useToast()
 
   useEffect(() => {
-    const getUser = async () => {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser()
-      setUser(user)
-    }
-    getUser()
+    const authenticated = localStorage.getItem("authenticated") === "true"
+    setIsAuthenticated(authenticated)
+  }, [])
 
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((event, session) => {
-      setUser(session?.user ?? null)
-    })
-
-    return () => subscription.unsubscribe()
-  }, [supabase.auth])
-
-  const handleSignOut = async () => {
+  const handleSignOut = () => {
     try {
-      const { error } = await supabase.auth.signOut()
-      if (error) throw error
+      localStorage.removeItem("authenticated")
+      localStorage.removeItem("savedBarcodes")
+      setIsAuthenticated(false)
 
       toast({
-        title: "Success",
-        description: "Signed out successfully!",
+        title: "Erfolg",
+        description: "Erfolgreich abgemeldet!",
       })
       router.push("/")
     } catch (error) {
       toast({
-        title: "Error",
-        description: "Failed to sign out",
+        title: "Fehler",
+        description: "Abmeldung fehlgeschlagen",
         variant: "destructive",
       })
     }
@@ -54,47 +40,36 @@ export function Navigation() {
 
   return (
     <nav className="border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-      <div className="container mx-auto px-4">
-        <div className="flex items-center justify-between h-16">
+      <div className="container mx-auto px-3">
+        <div className="flex items-center justify-between h-14">
           <div className="flex items-center gap-2">
-            <QrCode className="w-6 h-6" />
-            <span className="font-bold text-lg">Barcode Generator</span>
+            <QrCode className="w-5 h-5" />
+            <span className="font-bold text-base">Barcode Generator</span>
           </div>
 
-          <div className="flex items-center gap-2">
-            <Button variant={pathname === "/" ? "default" : "ghost"} size="sm" asChild>
+          <div className="flex items-center gap-1">
+            <Button variant={pathname === "/" ? "default" : "ghost"} size="sm" asChild className="h-9 px-3">
               <Link href="/">
-                <QrCode className="w-4 h-4 mr-2" />
+                <QrCode className="w-4 h-4 mr-1" />
                 Generator
               </Link>
             </Button>
-            <Button variant={pathname === "/dashboard" ? "default" : "ghost"} size="sm" asChild>
+            <Button variant={pathname === "/dashboard" ? "default" : "ghost"} size="sm" asChild className="h-9 px-3">
               <Link href="/dashboard">
-                <LayoutDashboard className="w-4 h-4 mr-2" />
+                <LayoutDashboard className="w-4 h-4 mr-1" />
                 Dashboard
               </Link>
             </Button>
 
-            {user ? (
-              <div className="flex items-center gap-2 ml-4">
-                <span className="text-sm text-muted-foreground flex items-center gap-1">
-                  <User className="w-4 h-4" />
-                  {user.email}
-                </span>
-                <Button variant="ghost" size="sm" onClick={handleSignOut}>
-                  <LogOut className="w-4 h-4 mr-2" />
-                  Sign Out
-                </Button>
-              </div>
+            {isAuthenticated ? (
+              <Button variant="ghost" size="sm" onClick={handleSignOut} className="h-9 px-3 ml-2">
+                <LogOut className="w-4 h-4 mr-1" />
+                Abmelden
+              </Button>
             ) : (
-              <div className="flex items-center gap-2 ml-4">
-                <Button variant="ghost" size="sm" asChild>
-                  <Link href="/auth/login">Sign In</Link>
-                </Button>
-                <Button variant="default" size="sm" asChild>
-                  <Link href="/auth/sign-up">Sign Up</Link>
-                </Button>
-              </div>
+              <Button variant="ghost" size="sm" asChild className="h-9 px-3 ml-2">
+                <Link href="/auth/login">Anmelden</Link>
+              </Button>
             )}
           </div>
         </div>
