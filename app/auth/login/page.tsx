@@ -24,7 +24,7 @@ export default function Page() {
       const result = await loginWithPin(pin)
 
       if (result.success) {
-        router.push("/dashboard")
+        router.push("/")
       } else {
         setError(result.error || "Ein Fehler ist aufgetreten.")
       }
